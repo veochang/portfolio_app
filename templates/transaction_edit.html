@@ -1,0 +1,38 @@
+{% extends "layout.html" %}
+
+{% block title %}Edit Transaction – Investment Dashboard{% endblock %}
+
+{% block content %}
+<h2>Edit Transaction</h2>
+<form method="post" action="/transactions/edit/{{ transaction.id }}">
+    <label for="date">Date</label>
+    <input type="date" id="date" name="date" value="{{ transaction.date }}" required>
+    <label for="type">Type</label>
+    <input type="text" id="type" name="type" value="{{ transaction.type }}" required>
+    <label for="account_id">Account</label>
+    <select id="account_id" name="account_id" required>
+        {% for acc in accounts %}
+        <option value="{{ acc.id }}" {% if acc.id == transaction.account_id %}selected{% endif %}>{{ acc.name }}</option>
+        {% endfor %}
+    </select>
+    <label for="ticker_id">Ticker</label>
+    <select id="ticker_id" name="ticker_id" required>
+        {% for tk in tickers %}
+        <option value="{{ tk.id }}" {% if tk.id == transaction.ticker_id %}selected{% endif %}>{{ tk.symbol }}</option>
+        {% endfor %}
+    </select>
+    <label for="units">Transacted Units</label>
+    <input type="number" step="0.0001" id="units" name="units" value="{{ transaction.units }}" required>
+    <label for="value">Transacted Value</label>
+    <input type="number" step="0.01" id="value" name="value" value="{{ transaction.value }}" required>
+    <label for="price_per_unit">Price per Unit</label>
+    <input type="number" step="0.0001" id="price_per_unit" name="price_per_unit" value="{{ transaction.price_per_unit }}" required>
+    <label for="fees">Fees</label>
+    <input type="number" step="0.01" id="fees" name="fees" value="{{ transaction.fees or '' }}">
+    <label for="realized_tax">Realized Tax</label>
+    <input type="number" step="0.01" id="realized_tax" name="realized_tax" value="{{ transaction.realized_tax or '' }}">
+    <label for="cost_calculation">Cost Calculation</label>
+    <input type="number" step="0.01" id="cost_calculation" name="cost_calculation" value="{{ transaction.cost_calculation or '' }}">
+    <button type="submit">Save</button>
+</form>
+{% endblock %}

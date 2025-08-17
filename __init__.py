@@ -1,0 +1,1 @@
+"""Package initializer for the investment portfolio application."""

@@ -1,0 +1,54 @@
+{% extends "layout.html" %}
+
+{% block title %}Home – Investment Dashboard{% endblock %}
+
+{% block content %}
+<h2>Portfolio Overview</h2>
+<div class="summary">
+    <div class="summary-card">
+        <h3>Total Value</h3>
+        <div class="value">${{ '%.2f' | format(total_summary.total_value) }}</div>
+    </div>
+    <div class="summary-card">
+        <h3>Total Cost</h3>
+        <div class="value">${{ '%.2f' | format(total_summary.total_cost) }}</div>
+    </div>
+    <div class="summary-card">
+        <h3>Gain</h3>
+        <div class="value">${{ '%.2f' | format(total_summary.gain) }}</div>
+    </div>
+</div>
+<h3>Allocation</h3>
+<p>
+    Stock: ${{ '%.2f' | format(total_summary.stock_value) }} &nbsp;|
+    Bond: ${{ '%.2f' | format(total_summary.bond_value) }} &nbsp;|
+    Other: ${{ '%.2f' | format(total_summary.other_value) }}
+</p>
+<h3>Account Summaries</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Account</th>
+            <th>Value</th>
+            <th>Cost</th>
+            <th>Gain</th>
+            <th>Stock</th>
+            <th>Bond</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for acc in account_summaries %}
+        <tr>
+            <td>{{ acc.name }}</td>
+            <td>${{ '%.2f' | format(acc.total_value) }}</td>
+            <td>${{ '%.2f' | format(acc.total_cost) }}</td>
+            <td>${{ '%.2f' | format(acc.gain) }}</td>
+            <td>${{ '%.2f' | format(acc.stock_value) }}</td>
+            <td>${{ '%.2f' | format(acc.bond_value) }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+<h3>Portfolio Value History (60 days)</h3>
+<img src="{{ chart_uri }}" alt="Portfolio History Chart" style="max-width:100%; height:auto; border:1px solid #dee2e6; border-radius:4px;">
+{% endblock %}

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Investment Dashboard{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/styles.css') }}">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Investment Portfolio Dashboard</h1>
+            <nav>
+                <a href="/">Home</a>
+                <a href="/accounts">Accounts</a>
+                <a href="/tickers">Tickers</a>
+                <a href="/transactions">Transactions</a>
+                <a href="/update_prices">Update Prices</a>
+            </nav>
+        </div>
+    </header>
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

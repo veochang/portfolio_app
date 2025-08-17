@@ -1,0 +1,18 @@
+{% extends "layout.html" %}
+
+{% block title %}Edit Account – Investment Dashboard{% endblock %}
+
+{% block content %}
+<h2>Edit Account</h2>
+<form method="post" action="/accounts/edit/{{ account.id }}">
+    <label for="name">Name</label>
+    <input type="text" id="name" name="name" value="{{ account.name }}" required>
+    <label for="taxation">Taxation</label>
+    <input type="text" id="taxation" name="taxation" value="{{ account.taxation or '' }}">
+    <label for="short_term_tax_rate">Short Term Tax Rate</label>
+    <input type="number" step="0.01" id="short_term_tax_rate" name="short_term_tax_rate" value="{{ account.short_term_tax_rate or '' }}">
+    <label for="long_term_tax_rate">Long Term Tax Rate</label>
+    <input type="number" step="0.01" id="long_term_tax_rate" name="long_term_tax_rate" value="{{ account.long_term_tax_rate or '' }}">
+    <button type="submit">Save</button>
+</form>
+{% endblock %}

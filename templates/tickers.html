@@ -1,0 +1,52 @@
+{% extends "layout.html" %}
+
+{% block title %}Tickers – Investment Dashboard{% endblock %}
+
+{% block content %}
+<h2>Tickers</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Symbol</th>
+            <th>Classification</th>
+            <th>Proxy Symbol</th>
+            <th>Conversion Ratio</th>
+            <th>Ratio Timestamp</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for tk in tickers %}
+        <tr>
+            <td>{{ tk.symbol }}</td>
+            <td>{{ tk.classification }}</td>
+            <td>{{ tk.proxy_symbol or '' }}</td>
+            <td>{{ tk.conversion_ratio or '' }}</td>
+            <td>{{ tk.ratio_timestamp or '' }}</td>
+            <td>
+                <a href="/tickers/edit/{{ tk.id }}">Edit</a> |
+                <a href="/tickers/delete/{{ tk.id }}" onclick="return confirm('Delete ticker?');">Delete</a>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<h3>Add New Ticker</h3>
+<form method="post" action="/tickers">
+    <label for="symbol">Symbol</label>
+    <input type="text" id="symbol" name="symbol" required>
+    <label for="classification">Classification</label>
+    <select id="classification" name="classification" required>
+        <option value="stock">Stock</option>
+        <option value="bond">Bond</option>
+    </select>
+    <label for="proxy_symbol">Proxy Symbol (optional)</label>
+    <input type="text" id="proxy_symbol" name="proxy_symbol">
+    <label for="conversion_ratio">Conversion Ratio (optional)</label>
+    <input type="number" step="0.0001" id="conversion_ratio" name="conversion_ratio">
+    <label for="ratio_timestamp">Ratio Timestamp (YYYY-MM-DD) (optional)</label>
+    <input type="date" id="ratio_timestamp" name="ratio_timestamp">
+    <button type="submit">Add Ticker</button>
+</form>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "layout.html" %}
+
+{% block title %}Transactions – Investment Dashboard{% endblock %}
+
+{% block content %}
+<h2>Transactions</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Account</th>
+            <th>Ticker</th>
+            <th>Units</th>
+            <th>Value</th>
+            <th>Price/Unit</th>
+            <th>Fees</th>
+            <th>Realized Tax</th>
+            <th>Cost Calculation</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for tx in transactions %}
+        <tr>
+            <td>{{ tx.date }}</td>
+            <td>{{ tx.type }}</td>
+            <td>{{ tx.account_name or '' }}</td>
+            <td>{{ tx.ticker_symbol or '' }}</td>
+            <td>{{ tx.units }}</td>
+            <td>{{ tx.value }}</td>
+            <td>{{ tx.price_per_unit }}</td>
+            <td>{{ tx.fees or '' }}</td>
+            <td>{{ tx.realized_tax or '' }}</td>
+            <td>{{ tx.cost_calculation or '' }}</td>
+            <td>
+                <a href="/transactions/edit/{{ tx.id }}">Edit</a> |
+                <a href="/transactions/delete/{{ tx.id }}" onclick="return confirm('Delete transaction?');">Delete</a>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<h3>Add New Transaction</h3>
+<form method="post" action="/transactions">
+    <label for="date">Date</label>
+    <input type="date" id="date" name="date" required>
+    <label for="type">Type</label>
+    <input type="text" id="type" name="type" required>
+    <label for="account_id">Account</label>
+    <select id="account_id" name="account_id" required>
+        {% for acc in accounts %}
+        <option value="{{ acc.id }}">{{ acc.name }}</option>
+        {% endfor %}
+    </select>
+    <label for="ticker_id">Ticker</label>
+    <select id="ticker_id" name="ticker_id" required>
+        {% for tk in tickers %}
+        <option value="{{ tk.id }}">{{ tk.symbol }}</option>
+        {% endfor %}
+    </select>
+    <label for="units">Transacted Units</label>
+    <input type="number" step="0.0001" id="units" name="units" required>
+    <label for="value">Transacted Value</label>
+    <input type="number" step="0.01" id="value" name="value" required>
+    <label for="price_per_unit">Price per Unit</label>
+    <input type="number" step="0.0001" id="price_per_unit" name="price_per_unit" required>
+    <label for="fees">Fees (optional)</label>
+    <input type="number" step="0.01" id="fees" name="fees">
+    <label for="realized_tax">Realized Tax (optional)</label>
+    <input type="number" step="0.01" id="realized_tax" name="realized_tax">
+    <label for="cost_calculation">Cost Calculation (optional)</label>
+    <input type="number" step="0.01" id="cost_calculation" name="cost_calculation">
+    <button type="submit">Add Transaction</button>
+</form>
+{% endblock %}
