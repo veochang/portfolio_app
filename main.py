@@ -22,8 +22,8 @@ install yfinance in their own environment to enable automatic price updates.
 To run the application locally:
 
 ```bash
-cd /path/to/src
-python -m uvicorn src.main:app --reload --port 8000
+cd /path/to/portfolio_app
+python -m uvicorn srcmain:app --reload --port 8000
 ```
 
 Then navigate to http://localhost:8000 in a browser.
@@ -115,18 +115,26 @@ async def update_all_prices(conn: sqlite3.Connection) -> None:
     today_str = date.today().isoformat()
     for tk in tickers:
         symbol = tk["symbol"]
-        proxy_symbol = tk["proxy_symbol"]
-        ratio = tk["conversion_ratio"] or 1.0
+        # Check if there is a proxy ratio effective for today
+        proxy_entry = db.get_effective_proxy(conn, tk["id"], today_str)
         price: Optional[float] = None
-        if proxy_symbol:
-            # Use proxy symbol to fetch price then apply ratio
+        if proxy_entry:
+            proxy_symbol = proxy_entry["proxy_symbol"]
+            ratio = proxy_entry["conversion_ratio"] or 1.0
             p = await fetch_latest_price(proxy_symbol)
             if p is not None:
                 price = p * ratio
         else:
-            p = await fetch_latest_price(symbol)
-            if p is not None:
-                price = p
+            proxy_symbol_fallback = tk["proxy_symbol"]
+            ratio_fallback = tk["conversion_ratio"] or 1.0
+            if proxy_symbol_fallback:
+                p = await fetch_latest_price(proxy_symbol_fallback)
+                if p is not None:
+                    price = p * ratio_fallback
+            else:
+                p = await fetch_latest_price(symbol)
+                if p is not None:
+                    price = p
         if price is not None:
             # Insert price into history
             db.insert_price(conn, tk["id"], today_str, price)
@@ -353,15 +361,20 @@ async def tickers_post(request: Request) -> RedirectResponse:
 
 @app.get("/tickers/edit/{ticker_id}", response_class=HTMLResponse)
 async def tickers_edit(request: Request, ticker_id: int) -> HTMLResponse:
-    """Render edit form for a ticker."""
+    """Render edit form for a ticker, including proxy history."""
     conn = db.get_db()
     ticker = db.get_ticker(conn, ticker_id)
+    proxies = db.list_proxy_history(conn, ticker_id)
     conn.close()
     if not ticker:
         return RedirectResponse("/tickers")
     return templates.TemplateResponse(
         "ticker_edit.html",
-        {"request": request, "ticker": ticker},
+        {
+            "request": request,
+            "ticker": ticker,
+            "proxies": proxies,
+        },
     )
 
 
@@ -398,6 +411,30 @@ async def tickers_delete(ticker_id: int) -> RedirectResponse:
     db.delete_ticker(conn, ticker_id)
     conn.close()
     return RedirectResponse("/tickers", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/tickers/{ticker_id}/proxy")
+async def tickers_add_proxy(request: Request, ticker_id: int) -> RedirectResponse:
+    """Handle adding a new proxy ratio entry for a ticker."""
+    body_bytes = await request.body()
+    data: Dict[str, str] = {}
+    if body_bytes:
+        import urllib.parse as _urlparse
+        parsed = _urlparse.parse_qs(body_bytes.decode(), keep_blank_values=True)
+        data = {k: v[0] for k, v in parsed.items()}
+    proxy_symbol = data.get("proxy_symbol", "").strip()
+    def to_float(value: Optional[str]) -> Optional[float]:
+        try:
+            return float(value) if value not in (None, "") else None
+        except ValueError:
+            return None
+    ratio = to_float(data.get("conversion_ratio")) or 1.0
+    ratio_timestamp = data.get("ratio_timestamp", "").strip()
+    if proxy_symbol and ratio_timestamp:
+        conn = db.get_db()
+        db.add_proxy_history(conn, ticker_id, proxy_symbol, ratio, ratio_timestamp)
+        conn.close()
+    return RedirectResponse(f"/tickers/edit/{ticker_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 ###############################
@@ -440,21 +477,66 @@ async def transactions_post(request: Request) -> RedirectResponse:
     date_str = data.get("date", "")
     type_str = data.get("type", "")
     account_id = int(data.get("account_id", 0)) if data.get("account_id") else 0
-    ticker_id = int(data.get("ticker_id", 0)) if data.get("ticker_id") else 0
+    # ticker_id may be empty for cash transactions
+    ticker_raw = data.get("ticker_id")
+    ticker_id = int(ticker_raw) if ticker_raw not in (None, "") else 0
     units = to_float(data.get("units")) or 0.0
     value = to_float(data.get("value")) or 0.0
     price_per_unit = to_float(data.get("price_per_unit")) or 0.0
     fees = to_float(data.get("fees"))
     realized_tax = to_float(data.get("realized_tax"))
     cost_calc = to_float(data.get("cost_calculation"))
-    if date_str and type_str and account_id and ticker_id:
+    if date_str and type_str and account_id:
+        # Determine sign of units based on transaction type
+        t_upper = type_str.upper()
+        # For cash transactions (deposit/withdraw) we ignore ticker and units
+        if t_upper == "SELL":
+            units = -abs(units)
+        elif t_upper == "BUY":
+            units = abs(units)
+        elif t_upper in ("DEPOSIT", "WITHDRAW"):
+            ticker_id = 0
+            units = 0.0
         conn = db.get_db()
+        # Perform validations
+        error_msg: Optional[str] = None
+        if t_upper in ("BUY", "WITHDRAW"):
+            cash = db.compute_account_cash(conn, account_id)
+            # For withdraw, we use value; for buy we also use value as cost
+            if cash < value:
+                error_msg = f"Insufficient cash: available {cash:.2f}, required {value:.2f}"
+        elif t_upper == "SELL":
+            # Check units available
+            if ticker_id:
+                units_available = db.compute_units(conn, account_id, ticker_id)
+                if units_available < abs(units):
+                    error_msg = f"Insufficient shares: available {units_available:.4f}, trying to sell {abs(units):.4f}"
+            else:
+                error_msg = "Sell transaction requires a ticker"
+        # If error, close conn and render error page
+        if error_msg:
+            # Re-render transactions page with error
+            transactions = db.list_transactions(conn)
+            accounts = db.list_accounts(conn)
+            tickers = db.list_tickers(conn)
+            conn.close()
+            return templates.TemplateResponse(
+                "transactions.html",
+                {
+                    "request": request,
+                    "transactions": transactions,
+                    "accounts": accounts,
+                    "tickers": tickers,
+                    "error": error_msg,
+                },
+            )
+        # Otherwise insert transaction
         db.create_transaction(
             conn,
             date_str,
-            type_str,
+            t_upper,
             account_id,
-            ticker_id,
+            ticker_id if ticker_id != 0 else None,
             units,
             value,
             price_per_unit,
@@ -504,22 +586,59 @@ async def transactions_edit_post(request: Request, transaction_id: int) -> Redir
     date_str = data.get("date", "")
     type_str = data.get("type", "")
     account_id = int(data.get("account_id", 0)) if data.get("account_id") else 0
-    ticker_id = int(data.get("ticker_id", 0)) if data.get("ticker_id") else 0
+    ticker_raw = data.get("ticker_id")
+    ticker_id = int(ticker_raw) if ticker_raw not in (None, "") else 0
     units = to_float(data.get("units")) or 0.0
     value_f = to_float(data.get("value")) or 0.0
     price_per_unit_f = to_float(data.get("price_per_unit")) or 0.0
     fees = to_float(data.get("fees"))
     realized_tax = to_float(data.get("realized_tax"))
     cost_calc = to_float(data.get("cost_calculation"))
-    if date_str and type_str and account_id and ticker_id:
+    if date_str and type_str and account_id:
+        t_upper = type_str.upper()
+        if t_upper == "SELL":
+            units = -abs(units)
+        elif t_upper == "BUY":
+            units = abs(units)
+        elif t_upper in ("DEPOSIT", "WITHDRAW"):
+            ticker_id = 0
+            units = 0.0
         conn = db.get_db()
+        error_msg: Optional[str] = None
+        if t_upper in ("BUY", "WITHDRAW"):
+            cash = db.compute_account_cash(conn, account_id, exclude_transaction_id=transaction_id)
+            if cash < value_f:
+                error_msg = f"Insufficient cash: available {cash:.2f}, required {value_f:.2f}"
+        elif t_upper == "SELL":
+            if ticker_id:
+                units_available = db.compute_units(conn, account_id, ticker_id, exclude_transaction_id=transaction_id)
+                if units_available < abs(units):
+                    error_msg = f"Insufficient shares: available {units_available:.4f}, trying to sell {abs(units):.4f}"
+            else:
+                error_msg = "Sell transaction requires a ticker"
+        if error_msg:
+            accounts = db.list_accounts(conn)
+            tickers = db.list_tickers(conn)
+            transaction = db.get_transaction(conn, transaction_id)
+            conn.close()
+            return templates.TemplateResponse(
+                "transaction_edit.html",
+                {
+                    "request": request,
+                    "transaction": transaction,
+                    "accounts": accounts,
+                    "tickers": tickers,
+                    "error": error_msg,
+                },
+            )
+        # Otherwise perform update
         db.update_transaction(
             conn,
             transaction_id,
             date_str,
-            type_str,
+            t_upper,
             account_id,
-            ticker_id,
+            ticker_id if ticker_id != 0 else None,
             units,
             value_f,
             price_per_unit_f,

@@ -4,6 +4,9 @@
 
 {% block content %}
 <h2>Transactions</h2>
+{% if error %}
+<p style="color:red; font-weight:bold;">{{ error }}</p>
+{% endif %}
 <table>
     <thead>
         <tr>
@@ -47,7 +50,12 @@
     <label for="date">Date</label>
     <input type="date" id="date" name="date" required>
     <label for="type">Type</label>
-    <input type="text" id="type" name="type" required>
+    <select id="type" name="type" required>
+        <option value="BUY">BUY</option>
+        <option value="SELL">SELL</option>
+        <option value="DEPOSIT">DEPOSIT</option>
+        <option value="WITHDRAW">WITHDRAW</option>
+    </select>
     <label for="account_id">Account</label>
     <select id="account_id" name="account_id" required>
         {% for acc in accounts %}
@@ -55,7 +63,8 @@
         {% endfor %}
     </select>
     <label for="ticker_id">Ticker</label>
-    <select id="ticker_id" name="ticker_id" required>
+    <select id="ticker_id" name="ticker_id">
+        <option value="">-- Cash --</option>
         {% for tk in tickers %}
         <option value="{{ tk.id }}">{{ tk.symbol }}</option>
         {% endfor %}

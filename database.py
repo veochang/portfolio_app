@@ -33,7 +33,7 @@ stored for monetary amounts, unit quantities and tax rates.
 
 Usage:
 
->>> from src.database import get_db, init_db
+>>> from srcdatabase import get_db, init_db
 >>> conn = get_db()
 >>> init_db(conn)
 >>> # call other helper functions as needed
@@ -127,6 +127,20 @@ def init_db(conn: sqlite3.Connection) -> None:
             ticker_id INTEGER,
             date TEXT,
             price REAL,
+            FOREIGN KEY(ticker_id) REFERENCES tickers(id)
+        )
+        """
+    )
+
+    # Create proxy history table for time‑series conversion ratios
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS proxy_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker_id INTEGER,
+            proxy_symbol TEXT,
+            conversion_ratio REAL,
+            ratio_timestamp TEXT,
             FOREIGN KEY(ticker_id) REFERENCES tickers(id)
         )
         """
@@ -647,6 +661,159 @@ def get_price_on_or_before(conn: sqlite3.Connection, ticker_id: int, date: str) 
     )
     row = cur.fetchone()
     return row[0] if row else None
+
+###############################
+# Proxy history operations    #
+###############################
+
+def list_proxy_history(conn: sqlite3.Connection, ticker_id: int) -> List[sqlite3.Row]:
+    """Return all proxy history entries for a ticker ordered by timestamp descending."""
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT * FROM proxy_history
+        WHERE ticker_id = ?
+        ORDER BY ratio_timestamp DESC
+        """,
+        (ticker_id,),
+    )
+    return cur.fetchall()
+
+
+def add_proxy_history(
+    conn: sqlite3.Connection,
+    ticker_id: int,
+    proxy_symbol: str,
+    conversion_ratio: float,
+    ratio_timestamp: str,
+) -> int:
+    """Insert a new proxy ratio entry for a ticker.
+
+    Args:
+        conn: database connection
+        ticker_id: id of the ticker
+        proxy_symbol: symbol used as proxy
+        conversion_ratio: conversion ratio
+        ratio_timestamp: date when this ratio becomes effective
+
+    Returns:
+        id of inserted row
+    """
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO proxy_history (ticker_id, proxy_symbol, conversion_ratio, ratio_timestamp)
+        VALUES (?, ?, ?, ?)
+        """,
+        (ticker_id, proxy_symbol, conversion_ratio, ratio_timestamp),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def get_effective_proxy(
+    conn: sqlite3.Connection,
+    ticker_id: int,
+    as_of_date: str,
+) -> Optional[sqlite3.Row]:
+    """Get the most recent proxy ratio entry effective on or before a given date.
+
+    Args:
+        conn: database connection
+        ticker_id: id of the ticker
+        as_of_date: ISO date string
+
+    Returns:
+        the proxy_history row or None
+    """
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT * FROM proxy_history
+        WHERE ticker_id = ? AND ratio_timestamp <= ?
+        ORDER BY ratio_timestamp DESC
+        LIMIT 1
+        """,
+        (ticker_id, as_of_date),
+    )
+    return cur.fetchone()
+
+
+###############################
+# Cash and unit computations  #
+###############################
+
+def compute_account_cash(
+    conn: sqlite3.Connection,
+    account_id: int,
+    exclude_transaction_id: Optional[int] = None,
+) -> float:
+    """Compute available cash for an account.
+
+    The cash balance is calculated as the sum of deposits and sells minus
+    withdrawals and buys. Transactions associated with tickers indicate
+    investment activity; deposits and withdrawals have no ticker. When editing
+    an existing transaction the record can be excluded from the calculation by
+    passing its id to avoid double counting.
+
+    Args:
+        conn: database connection
+        account_id: account identifier
+        exclude_transaction_id: optional id of a transaction to exclude from calculation
+
+    Returns:
+        available cash balance
+    """
+    cur = conn.cursor()
+    query = "SELECT type, value FROM transactions WHERE account_id = ?"
+    params: List[Any] = [account_id]
+    if exclude_transaction_id is not None:
+        query += " AND id != ?"
+        params.append(exclude_transaction_id)
+    cur.execute(query, params)
+    rows = cur.fetchall()
+    cash = 0.0
+    for row in rows:
+        ttype = (row[0] or "").upper()
+        val = row[1] or 0.0
+        if ttype == "DEPOSIT":
+            cash += val
+        elif ttype == "WITHDRAW":
+            cash -= val
+        elif ttype == "BUY":
+            cash -= val
+        elif ttype == "SELL":
+            cash += val
+        # other types could be ignored or extend here
+    return cash
+
+
+def compute_units(
+    conn: sqlite3.Connection,
+    account_id: int,
+    ticker_id: int,
+    exclude_transaction_id: Optional[int] = None,
+) -> float:
+    """Compute the number of units held for a given account and ticker.
+
+    Args:
+        conn: database connection
+        account_id: account id
+        ticker_id: ticker id
+        exclude_transaction_id: optional transaction id to exclude
+
+    Returns:
+        float representing units held (positive for net long positions)
+    """
+    cur = conn.cursor()
+    query = "SELECT SUM(units) FROM transactions WHERE account_id = ? AND ticker_id = ?"
+    params: List[Any] = [account_id, ticker_id]
+    if exclude_transaction_id is not None:
+        query += " AND id != ?"
+        params.append(exclude_transaction_id)
+    cur.execute(query, params)
+    row = cur.fetchone()
+    return row[0] if row and row[0] is not None else 0.0
 
 
 ###########################
