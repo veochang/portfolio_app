@@ -33,7 +33,7 @@ stored for monetary amounts, unit quantities and tax rates.
 
 Usage:
 
->>> from srcdatabase import get_db, init_db
+>>> from portfolio_app.database import get_db, init_db
 >>> conn = get_db()
 >>> init_db(conn)
 >>> # call other helper functions as needed
@@ -86,16 +86,14 @@ def init_db(conn: sqlite3.Connection) -> None:
         )
         """
     )
-    # Create tickers table
+    # Create tickers table. We drop and recreate it to remove legacy proxy fields.
+    cur.execute("DROP TABLE IF EXISTS tickers")
     cur.execute(
         """
-        CREATE TABLE IF NOT EXISTS tickers (
+        CREATE TABLE tickers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             symbol TEXT NOT NULL UNIQUE,
-            classification TEXT,
-            proxy_symbol TEXT,
-            conversion_ratio REAL DEFAULT 1.0,
-            ratio_timestamp TEXT
+            classification TEXT
         )
         """
     )
@@ -309,9 +307,6 @@ def create_ticker(
     conn: sqlite3.Connection,
     symbol: str,
     classification: str,
-    proxy_symbol: Optional[str],
-    conversion_ratio: Optional[float],
-    ratio_timestamp: Optional[str],
 ) -> int:
     """Insert a new ticker.
 
@@ -319,9 +314,6 @@ def create_ticker(
         conn: database connection
         symbol: primary ticker symbol
         classification: 'stock' or 'bond'
-        proxy_symbol: symbol used as proxy for non‑public tickers
-        conversion_ratio: ratio to convert proxy price to actual price
-        ratio_timestamp: effective date for the conversion ratio (ISO format)
 
     Returns:
         newly inserted ticker id
@@ -329,10 +321,10 @@ def create_ticker(
     cur = conn.cursor()
     cur.execute(
         """
-        INSERT INTO tickers (symbol, classification, proxy_symbol, conversion_ratio, ratio_timestamp)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO tickers (symbol, classification)
+        VALUES (?, ?)
         """,
-        (symbol, classification, proxy_symbol, conversion_ratio, ratio_timestamp),
+        (symbol, classification),
     )
     conn.commit()
     return cur.lastrowid
@@ -343,9 +335,6 @@ def update_ticker(
     ticker_id: int,
     symbol: str,
     classification: str,
-    proxy_symbol: Optional[str],
-    conversion_ratio: Optional[float],
-    ratio_timestamp: Optional[str],
 ) -> None:
     """Update an existing ticker.
 
@@ -354,18 +343,15 @@ def update_ticker(
         ticker_id: id of the ticker to update
         symbol: new symbol
         classification: new classification
-        proxy_symbol: new proxy symbol
-        conversion_ratio: new conversion ratio
-        ratio_timestamp: new ratio timestamp
     """
     cur = conn.cursor()
     cur.execute(
         """
         UPDATE tickers
-        SET symbol = ?, classification = ?, proxy_symbol = ?, conversion_ratio = ?, ratio_timestamp = ?
+        SET symbol = ?, classification = ?
         WHERE id = ?
         """,
-        (symbol, classification, proxy_symbol, conversion_ratio, ratio_timestamp, ticker_id),
+        (symbol, classification, ticker_id),
     )
     conn.commit()
 

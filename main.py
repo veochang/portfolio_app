@@ -23,7 +23,7 @@ To run the application locally:
 
 ```bash
 cd /path/to/portfolio_app
-python -m uvicorn srcmain:app --reload --port 8000
+python -m uvicorn portfolio_app.main:app --reload --port 8000
 ```
 
 Then navigate to http://localhost:8000 in a browser.
@@ -125,16 +125,10 @@ async def update_all_prices(conn: sqlite3.Connection) -> None:
             if p is not None:
                 price = p * ratio
         else:
-            proxy_symbol_fallback = tk["proxy_symbol"]
-            ratio_fallback = tk["conversion_ratio"] or 1.0
-            if proxy_symbol_fallback:
-                p = await fetch_latest_price(proxy_symbol_fallback)
-                if p is not None:
-                    price = p * ratio_fallback
-            else:
-                p = await fetch_latest_price(symbol)
-                if p is not None:
-                    price = p
+            # No proxy entry; fetch direct symbol price
+            p = await fetch_latest_price(symbol)
+            if p is not None:
+                price = p
         if price is not None:
             # Insert price into history
             db.insert_price(conn, tk["id"], today_str, price)
@@ -337,24 +331,16 @@ async def tickers_list(request: Request) -> HTMLResponse:
 async def tickers_post(request: Request) -> RedirectResponse:
     """Handle ticker creation from form submission."""
     body_bytes = await request.body()
-    data = {}
+    data: Dict[str, str] = {}
     if body_bytes:
         import urllib.parse as _urlparse
         parsed = _urlparse.parse_qs(body_bytes.decode(), keep_blank_values=True)
         data = {k: v[0] for k, v in parsed.items()}
     symbol = data.get("symbol", "").strip()
     classification = data.get("classification", "").strip()
-    proxy_symbol = data.get("proxy_symbol") or None
-    def to_float(value: Optional[str]) -> Optional[float]:
-        try:
-            return float(value) if value not in (None, "") else None
-        except ValueError:
-            return None
-    conversion_ratio = to_float(data.get("conversion_ratio"))
-    ratio_timestamp = data.get("ratio_timestamp") or None
     if symbol and classification:
         conn = db.get_db()
-        db.create_ticker(conn, symbol, classification, proxy_symbol, conversion_ratio, ratio_timestamp)
+        db.create_ticker(conn, symbol, classification)
         conn.close()
     return RedirectResponse("/tickers", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -382,24 +368,16 @@ async def tickers_edit(request: Request, ticker_id: int) -> HTMLResponse:
 async def tickers_edit_post(request: Request, ticker_id: int) -> RedirectResponse:
     """Handle submission of edited ticker details."""
     body_bytes = await request.body()
-    data = {}
+    data: Dict[str, str] = {}
     if body_bytes:
         import urllib.parse as _urlparse
         parsed = _urlparse.parse_qs(body_bytes.decode(), keep_blank_values=True)
         data = {k: v[0] for k, v in parsed.items()}
     symbol = data.get("symbol", "").strip()
     classification = data.get("classification", "").strip()
-    proxy_symbol = data.get("proxy_symbol") or None
-    def to_float(value: Optional[str]) -> Optional[float]:
-        try:
-            return float(value) if value not in (None, "") else None
-        except ValueError:
-            return None
-    conversion_ratio = to_float(data.get("conversion_ratio"))
-    ratio_timestamp = data.get("ratio_timestamp") or None
     if symbol and classification:
         conn = db.get_db()
-        db.update_ticker(conn, ticker_id, symbol, classification, proxy_symbol, conversion_ratio, ratio_timestamp)
+        db.update_ticker(conn, ticker_id, symbol, classification)
         conn.close()
     return RedirectResponse("/tickers", status_code=status.HTTP_303_SEE_OTHER)
 

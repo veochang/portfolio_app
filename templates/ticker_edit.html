@@ -12,12 +12,6 @@
         <option value="stock" {% if ticker.classification == 'stock' %}selected{% endif %}>Stock</option>
         <option value="bond" {% if ticker.classification == 'bond' %}selected{% endif %}>Bond</option>
     </select>
-    <label for="proxy_symbol">Proxy Symbol</label>
-    <input type="text" id="proxy_symbol" name="proxy_symbol" value="{{ ticker.proxy_symbol or '' }}">
-    <label for="conversion_ratio">Conversion Ratio</label>
-    <input type="number" step="0.0001" id="conversion_ratio" name="conversion_ratio" value="{{ ticker.conversion_ratio or '' }}">
-    <label for="ratio_timestamp">Ratio Timestamp (YYYY-MM-DD)</label>
-    <input type="date" id="ratio_timestamp" name="ratio_timestamp" value="{{ ticker.ratio_timestamp or '' }}">
     <button type="submit">Save</button>
 </form>
 
